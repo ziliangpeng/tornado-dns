@@ -11,7 +11,10 @@ class _errors(object):
     _codes = [
         (1, 'TIMEOUT', 'The query timed out'),
         (2, 'NO_NAMESERVERS', 'No nameserver was available to fulfil the request'),
-        (3, 'DNS_ERROR', 'Nameserver cannot response the request successfully'),
+        # range 100-199 reserved for dns error
+        (100, 'DNS_ERROR', 'Nameserver cannot response the request successfully dur to other errors'),
+        (101, 'DNS_SERVER_FAILED', 'Name server was unable to process the query due to an internal problem'),
+        (102, 'DOMAIN_NOT_EXIST', 'Requested domain does not exist'),
     ]
 
     def __init__(self):
@@ -49,6 +52,10 @@ def lookup(name, callback, errback=None, timeout=None, server=None):
     query = DNSPacket.create_a_question(name)
 
     def read_response(fd, events):
+        # cancel the timeout
+        if timeout_obj:
+            io_loop.remove_timeout(timeout_obj)
+
         try:
             data, addr = sock.recvfrom(1500)
         except socket.error, e:
@@ -61,13 +68,18 @@ def lookup(name, callback, errback=None, timeout=None, server=None):
         try:
             response = DNSPacket.from_wire(data)
             callback(response.get_answer_names())
-        except ParseError:
-            errback(errors.DNS_ERROR)
+        except ParseError as e:
+            try:
+                if e._rcode == 2:
+                    errback(errors.DNS_SERVER_FAILED)
+                elif e._rcode == 3:
+                    errback(errors.DOMAIN_NOT_EXIST)
+                else:
+                    errback(errors.DNS_ERROR)
+            except AttributeError:
+                errback(errors.DNS_ERROR)
         io_loop.remove_handler(fd)
 
-        # cancel the timeout
-        if timeout_obj:
-            io_loop.remove_timeout(timeout_obj)
 
     def send_query(fd, events):
         sock.sendto(query.to_wire(), (server, 53))

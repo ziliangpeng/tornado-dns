@@ -3,7 +3,14 @@ import socket
 from tornado_dns._struct import *
 
 class ParseError(Exception):
-    pass
+
+    def __init__(self, arg):
+        if isinstance(arg, int):
+            Exception.__init__(self, 'rcode = %d' % (arg,))
+            self._rcode = arg
+        else:
+            Exception.__init__(self, arg)
+
 
 class DNSPacket(object):
 
@@ -60,7 +67,7 @@ class DNSPacket(object):
             raise ParseError('Z section was non-zero')
         packet.rcode = reader.read_bits(4)
         if packet.rcode != 0:
-            raise ParseError('rcode = %d' % (rcode,))
+            raise ParseError(packet.rcode)
         packet.qdcount = reader.read_num(16)
         packet.ancount = reader.read_num(16)
         packet.nscount = reader.read_num(16)
