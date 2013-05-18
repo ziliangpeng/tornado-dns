@@ -11,6 +11,7 @@ class _errors(object):
     _codes = [
         (1, 'TIMEOUT', 'The query timed out'),
         (2, 'NO_NAMESERVERS', 'No nameserver was available to fulfil the request'),
+        (3, 'DNS_ERROR', 'Nameserver cannot response the request successfully'),
     ]
 
     def __init__(self):
@@ -57,8 +58,11 @@ def lookup(name, callback, errback=None, timeout=None, server=None):
                 io_loop.add_handler(fd, read_response, io_loop.READ)
                 return
             raise
-        response = DNSPacket.from_wire(data)
-        callback(response.get_answer_names())
+        try:
+            response = DNSPacket.from_wire(data)
+            callback(response.get_answer_names())
+        except ParseError:
+            errback(errors.DNS_ERROR)
         io_loop.remove_handler(fd)
 
         # cancel the timeout
